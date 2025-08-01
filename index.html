@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S.D.C. Minimalist</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --text-color: #e0e0e0;
+            --primary-color: #00aaff;
+            --container-bg: #2a2a4e;
+            --border-color: #444;
+            --success-color: #4caf50;
+            --error-color: #ff4d4d;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 80%;
+            max-width: 900px;
+            background-color: var(--container-bg);
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            display: flex;
+            gap: 2rem;
+        }
+        .controls {
+            flex: 1;
+        }
+        .log-area {
+            flex: 2;
+        }
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-top: 0;
+        }
+        fieldset {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        legend {
+            color: var(--primary-color);
+            font-weight: bold;
+            padding: 0 0.5rem;
+        }
+        .mirror-options label {
+            display: block;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+        }
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0088cc;
+        }
+        #log {
+            background-color: #111;
+            border: 1px solid var(--border-color);
+            height: 300px;
+            overflow-y: auto;
+            padding: 1rem;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            border-radius: 4px;
+        }
+        .log-entry {
+            margin-bottom: 0.5rem;
+        }
+        .log-entry.error { color: var(--error-color); }
+        .log-entry.success { color: var(--success-color); }
+        .log-entry .time { color: #888; margin-right: 0.5rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <h1>S.D.C. MVP</h1>
+            <fieldset>
+                <legend>Stake Mirrors</legend>
+                <div class="mirror-options">
+                    <label><input type="checkbox" name="mirror" value="com"> .com</label>
+                    <label><input type="checkbox" name="mirror" value="games"> .games</label>
+                    <label><input type="checkbox" name="mirror" value="bet"> .bet</label>
+                    <label><input type="checkbox" name="mirror" value="bz"> .bz</label>
+                    <label><input type="checkbox" name="mirror" value="jp"> .jp</label>
+                    <label><input type="checkbox" name="mirror" value="ac"> .ac</label>
+                </div>
+            </fieldset>
+            <button id="startButton">Starte Claim Prozess</button>
+        </div>
+        <div class="log-area">
+             <fieldset>
+                <legend>Log</legend>
+                <div id="log"></div>
+             </fieldset>
+        </div>
+    </div>
+
+    <script>
+        // Frontend JavaScript für die MVP-Anwendung
+        const startButton = document.getElementById('startButton');
+        const logContainer = document.getElementById('log');
+        const mirrorCheckboxes = document.querySelectorAll('input[name="mirror"]');
+
+        function logMessage(message, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.innerHTML = `<span class="time">[${time}]</span>`;
+            logEntry.appendChild(document.createTextNode(message));
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        async function startProcess() {
+            logMessage("Prozess gestartet...");
+            
+            if (typeof window.TM === 'undefined') {
+                logMessage("Tampermonkey Skript nicht gefunden. Ist es aktiv?", "error");
+                return;
+            }
+
+            const selectedMirrors = Array.from(mirrorCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+
+            if (selectedMirrors.length === 0) {
+                logMessage("Bitte mindestens einen Mirror auswählen.", "error");
+                return;
+            }
+
+            logMessage(`Konfiguriere Agenten für folgende Mirrors: ${selectedMirrors.join(', ')}`);
+            await window.TM.setMirrors(selectedMirrors);
+            
+            logMessage("Warte 2 Sekunden, damit die Widgets im Stake-Tab geladen werden können...");
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            for (const mirror of selectedMirrors) {
+                await processMirror(mirror);
+            }
+
+            logMessage("Alle ausgewählten Mirrors wurden verarbeitet.", "success");
+        }
+
+        async function processMirror(mirror) {
+            logMessage(`Verarbeite Mirror: ${mirror}...`);
+            try {
+                logMessage(`  -> Fordere CAPTCHA-Token an...`);
+                const token = await window.TM.getToken(mirror);
+                
+                if (!token) {
+                     throw new Error("Token konnte nicht empfangen werden. Prüfe den Stake-Tab.");
+                }
+
+                logMessage(`  -> Token für '${mirror}' erfolgreich erhalten.`, "success");
+                
+                // Hier kommt die eigentliche Logik zum Claimen des Drops hin.
+                await claimDrop(mirror, token);
+
+            } catch (err) {
+                logMessage(`  -> Fehler bei '${mirror}': ${err.message}`, "error");
+            }
+        }
+        
+        async function claimDrop(mirror, token) {
+            // Dies ist die Funktion, die den GraphQL-Aufruf zum Claimen durchführen würde.
+            // Die exakte GraphQL-Query ("payload") ist aus dem Original-Code nicht bekannt.
+            // Daher simulieren wir hier nur den Erfolg.
+            
+            logMessage(`    -> SIMULATION: Führe jetzt 'StakeFetch' aus, um Drop zu claimen...`);
+            
+            // // So würde der echte Aufruf aussehen (Beispiel-Payload):
+            // const payload = { 
+            //     "operationName": "claimDrop",
+            //     "variables": { "code": "someDropCodeXYZ", "captcha": token },
+            //     "query": "mutation claimDrop($code: String!, $captcha: String!) { ... }" 
+            // };
+            // const result = await window.TM.StakeFetch(mirror, payload);
+            // console.log(result);
+
+            logMessage(`    -> SIMULATION: Drop für '${mirror}' erfolgreich geclaimed.`, "success");
+        }
+
+        startButton.addEventListener('click', startProcess);
+
+        logMessage("MVP-Anwendung bereit. Bitte Stake.com in einem anderen Tab öffnen und einloggen.");
+    </script>
+</body>
+</html>
